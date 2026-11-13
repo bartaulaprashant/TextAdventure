@@ -16,6 +16,9 @@ import {
   addCondition,
   updateCondition,
   deleteCondition,
+  addEffect,
+  updateEffect,
+  deleteEffect,
 } from "./builder/worldDraft.js";
 
 const app = document.querySelector("#app");
@@ -553,6 +556,186 @@ function renderConditionEditor(rule) {
     .join("");
 }
 
+function renderEffectEditor(rule) {
+  if (!rule.effects.length) {
+    return `
+      <p class="empty-state">
+        No effects yet. This rule will not change the game state.
+      </p>
+    `;
+  }
+
+  return rule.effects
+    .map((effect, index) => {
+      const entityOptions = (selectedId) => `
+        <option value="">Select an entity</option>
+        ${state.builderDraft.entities
+          .map(
+            (entity) => `
+              <option
+                value="${escapeHTML(entity.id)}"
+                ${entity.id === selectedId ? "selected" : ""}
+              >
+                ${escapeHTML(entity.name)}
+              </option>
+            `
+          )
+          .join("")}
+      `;
+
+      const roomOptions = (selectedLocation) => `
+        ${state.builderDraft.rooms
+          .map(
+            (room) => `
+              <option
+                value="${escapeHTML(room.id)}"
+                ${room.id === selectedLocation ? "selected" : ""}
+              >
+                ${escapeHTML(room.name)}
+              </option>
+            `
+          )
+          .join("")}
+      `;
+
+      let fields = "";
+
+      if (effect.op === "set-flag") {
+        fields = `
+          <label>
+            Flag name
+            <input
+              name="flag"
+              value="${escapeHTML(effect.flag || "")}"
+              required
+            />
+          </label>
+
+          <label>
+            New value (JSON)
+            <input
+              name="value"
+              value="${escapeHTML(JSON.stringify(effect.value))}"
+              required
+            />
+          </label>
+        `;
+      }
+
+      if (effect.op === "set-entity-property") {
+        fields = `
+          <label>
+            Entity
+            <select name="entityId" required>
+              ${entityOptions(effect.entityId)}
+            </select>
+          </label>
+
+          <label>
+            Property name
+            <input
+              name="property"
+              value="${escapeHTML(effect.property || "")}"
+              required
+            />
+          </label>
+
+          <label>
+            New value (JSON)
+            <input
+              name="value"
+              value="${escapeHTML(JSON.stringify(effect.value))}"
+              required
+            />
+          </label>
+        `;
+      }
+
+      if (effect.op === "move-entity") {
+        fields = `
+          <label>
+            Entity
+            <select name="entityId" required>
+              ${entityOptions(effect.entityId)}
+            </select>
+          </label>
+
+          <label>
+            Destination
+            <select name="location" required>
+              <option value="">Select a destination</option>
+              <option
+                value="inventory"
+                ${effect.location === "inventory" ? "selected" : ""}
+              >
+                Player inventory
+              </option>
+              ${roomOptions(effect.location)}
+            </select>
+          </label>
+        `;
+      }
+
+      return `
+        <form
+          class="effect-card"
+          data-effect-index="${index}"
+        >
+          <div class="condition-card-heading">
+            <strong>Effect ${index + 1}</strong>
+
+            <button
+              type="button"
+              class="button button-small button-danger"
+              data-action="delete-effect:${index}"
+            >
+              Remove
+            </button>
+          </div>
+
+          <label>
+            Effect type
+            <select name="op" required data-effect-op>
+              <option
+                value="set-flag"
+                ${effect.op === "set-flag" ? "selected" : ""}
+              >
+                Set game flag
+              </option>
+
+              <option
+                value="set-entity-property"
+                ${effect.op === "set-entity-property" ? "selected" : ""}
+              >
+                Set entity property
+              </option>
+
+              <option
+                value="move-entity"
+                ${effect.op === "move-entity" ? "selected" : ""}
+              >
+                Move entity
+              </option>
+            </select>
+          </label>
+
+          <div class="condition-fields">
+            ${fields}
+          </div>
+
+          <button
+            type="submit"
+            class="button button-small"
+            data-action="save-effect"
+          >
+            Save Effect
+          </button>
+        </form>
+      `;
+    })
+    .join("");
+}
+
 function renderEntityList() {
   return state.builderDraft.entities
     .map(
@@ -1015,6 +1198,26 @@ function renderCreate() {
   </button>
 </div>
     </div>
+
+    <div class="condition-editor">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">RESULTS</p>
+      <h4>Effects</h4>
+      <p>These changes happen when all conditions are satisfied.</p>
+    </div>
+  </div>
+
+  ${renderEffectEditor(editingRule)}
+
+  <button
+    type="button"
+    class="button button-secondary"
+    data-action="add-effect"
+  >
+    + Add Effect
+  </button>
+</div>
   `
       : ""
   }
@@ -1268,6 +1471,35 @@ app.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "add-effect") {
+  const ruleId = state.editingRuleId;
+
+  if (!ruleId) return;
+
+  state.builderDraft = addEffect(
+    state.builderDraft,
+    ruleId,
+    "set-flag"
+  );
+
+  state.builderNotice = "Effect added.";
+  renderCreate();
+  return;
+}
+
+if (action.startsWith("delete-effect:")) {
+  const index = Number(action.slice("delete-effect:".length));
+
+  state.builderDraft = deleteEffect(
+    state.builderDraft,
+    state.editingRuleId,
+    index
+  );
+
+  state.builderNotice = "Effect removed.";
+  renderCreate();
+  return;
+}
   if (action === "start-game") {
     await startGame();
   } else if (action === "restart-game") {
@@ -1524,7 +1756,7 @@ app.addEventListener("submit", (event) => {
     renderCreate();
     return;
   }
-  
+
   if (event.target.matches(".condition-card")) {
     event.preventDefault();
 

@@ -430,4 +430,85 @@ export function deleteCondition(draft, ruleId, index) {
   };
 }
 
+export function addEffect(draft, ruleId, operation = "set-flag") {
+  const rule = draft.rules.find((item) => item.id === ruleId);
+
+  if (!rule) return draft;
+
+  let newEffect;
+
+  switch (operation) {
+    case "set-flag":
+      newEffect = {
+        op: "set-flag",
+        flag: "",
+        value: true
+      };
+      break;
+
+    case "set-entity-property":
+      newEffect = {
+        op: "set-entity-property",
+        entityId: "",
+        property: "",
+        value: true
+      };
+      break;
+
+    case "move-entity":
+      newEffect = {
+        op: "move-entity",
+        entityId: "",
+        location: ""
+      };
+      break;
+
+    default:
+      return draft;
+  }
+
+  return {
+    ...draft,
+    rules: draft.rules.map((item) =>
+      item.id === ruleId
+        ? {
+            ...item,
+            effects: [...(item.effects || []), newEffect]
+          }
+        : item
+    )
+  };
+}
+
+export function updateEffect(draft, ruleId, index, updates) {
+  return {
+    ...draft,
+    rules: draft.rules.map((rule) =>
+      rule.id === ruleId
+        ? {
+            ...rule,
+            effects: rule.effects.map((effect, i) =>
+              i === index ? updates : effect
+            )
+          }
+        : rule
+    )
+  };
+}
+
+export function deleteEffect(draft, ruleId, index) {
+  return {
+    ...draft,
+    rules: draft.rules.map((rule) =>
+      rule.id === ruleId
+        ? {
+            ...rule,
+            effects: rule.effects.filter((_, i) => i !== index)
+          }
+        : rule
+    )
+  };
+}
+
+
 export { DIRECTIONS };
