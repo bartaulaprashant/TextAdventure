@@ -1902,6 +1902,58 @@ app.addEventListener("change", (event) => {
 
     renderCreate();
   }
+
+  if (!event.target.matches("[data-effect-op]")) return;
+
+  const form = event.target.closest(".effect-card");
+
+  if (!form) return;
+
+  const index = Number(form.dataset.effectIndex);
+  const operation = event.target.value;
+  const ruleId = state.editingRuleId;
+
+  let newEffect;
+
+  switch (operation) {
+    case "set-flag":
+      newEffect = {
+        op: "set-flag",
+        flag: "",
+        value: true
+      };
+      break;
+
+    case "set-entity-property":
+      newEffect = {
+        op: "set-entity-property",
+        entityId: "",
+        property: "",
+        value: true
+      };
+      break;
+
+    case "move-entity":
+      newEffect = {
+        op: "move-entity",
+        entityId: "",
+        location: ""
+      };
+      break;
+
+    default:
+      return;
+  }
+
+  state.builderDraft = updateEffect(
+    state.builderDraft,
+    ruleId,
+    index,
+    newEffect
+  );
+
+  state.builderNotice = "Effect type changed.";
+  renderCreate();
 });
 
 render();
