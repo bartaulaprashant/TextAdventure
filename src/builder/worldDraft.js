@@ -357,5 +357,77 @@ export function deleteEntity(draft, entityId) {
     // rule-editor stage, where we can validate those references.
   };
 }
+export function addCondition(draft, ruleId, operation = "room-is") {
+  const defaults = {
+    "flag-equals": {
+      op: "flag-equals",
+      flag: "",
+      value: true,
+    },
+    "entity-location-is": {
+      op: "entity-location-is",
+      entityId: "",
+      location: "inventory",
+    },
+    "entity-property-equals": {
+      op: "entity-property-equals",
+      entityId: "",
+      property: "",
+      value: true,
+    },
+    "room-is": {
+      op: "room-is",
+      roomId: "",
+    },
+  };
+
+  const condition = defaults[operation];
+
+  if (!condition) {
+    throw new Error(`Unsupported condition operation: ${operation}`);
+  }
+
+  return {
+    ...draft,
+    rules: draft.rules.map((rule) =>
+      rule.id === ruleId
+        ? {
+            ...rule,
+            conditions: [...rule.conditions, condition],
+          }
+        : rule
+    ),
+  };
+}
+
+export function updateCondition(draft, ruleId, index, updates) {
+  return {
+    ...draft,
+    rules: draft.rules.map((rule) =>
+      rule.id === ruleId
+        ? {
+            ...rule,
+            conditions: rule.conditions.map((condition, i) =>
+              i === index ? { ...condition, ...updates } : condition
+            ),
+          }
+        : rule
+    ),
+  };
+}
+
+export function deleteCondition(draft, ruleId, index) {
+  return {
+    ...draft,
+    rules: draft.rules.map((rule) =>
+      rule.id === ruleId
+        ? {
+            ...rule,
+            conditions: rule.conditions.filter((_, i) => i !== index),
+          }
+        : rule
+    ),
+  };
+}
 
 export { DIRECTIONS };

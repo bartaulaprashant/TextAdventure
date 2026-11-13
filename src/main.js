@@ -13,6 +13,9 @@ import {
   addRule,
   updateRule,
   deleteRule,
+  addCondition,
+  updateCondition,
+  deleteCondition,
 } from "./builder/worldDraft.js";
 
 const app = document.querySelector("#app");
@@ -28,7 +31,8 @@ const state = {
   editingRoomId: "starting-room",
   builderNotice: "",
   editingEntityId: null,
-  editingRuleId:null
+  editingRuleId: null,
+  editingConditionIndex: null,
 };
 
 function escapeHTML(value = "") {
@@ -345,7 +349,9 @@ function renderRuleList() {
     `;
   }
 
-  return rules.map((rule) => `
+  return rules
+    .map(
+      (rule) => `
     <article class="builder-item">
       <div class="builder-item-info">
         <strong>${escapeHTML(rule.id)}</strong>
@@ -373,7 +379,178 @@ function renderRuleList() {
         </button>
       </div>
     </article>
-  `).join("");
+  `,
+    )
+    .join("");
+}
+function renderConditionEditor(rule) {
+  if (!rule.conditions.length) {
+    return `
+      <p class="empty-state">
+        No conditions yet. This rule will have no additional requirements.
+      </p>
+    `;
+  }
+
+  return rule.conditions
+    .map((condition, index) => {
+      const entityOptions = (selectedId) => `
+      <option value="">Select an entity</option>
+      ${state.builderDraft.entities
+        .map(
+          (entity) => `
+        <option
+          value="${escapeHTML(entity.id)}"
+          ${entity.id === selectedId ? "selected" : ""}
+        >
+          ${escapeHTML(entity.name)}
+        </option>
+      `,
+        )
+        .join("")}
+    `;
+
+      const roomOptions = (selectedId) => `
+      <option value="">Select a room</option>
+      ${state.builderDraft.rooms
+        .map(
+          (room) => `
+        <option
+          value="${escapeHTML(room.id)}"
+          ${room.id === selectedId ? "selected" : ""}
+        >
+          ${escapeHTML(room.name)}
+        </option>
+      `,
+        )
+        .join("")}
+    `;
+
+      let fields = "";
+
+      if (condition.op === "flag-equals") {
+        fields = `
+        <label>
+          Flag name
+          <input
+            name="flag"
+            value="${escapeHTML(condition.flag)}"
+            required
+          />
+        </label>
+
+        <label>
+          Expected value (JSON)
+          <input
+            name="value"
+            value="${escapeHTML(JSON.stringify(condition.value))}"
+            required
+          />
+        </label>
+      `;
+      }
+
+      if (condition.op === "entity-location-is") {
+        fields = `
+        <label>
+          Entity
+          <select name="entityId" required>
+            ${entityOptions(condition.entityId)}
+          </select>
+        </label>
+
+        <label>
+          Expected location
+          <select name="location" required>
+            <option value="inventory" ${condition.location === "inventory" ? "selected" : ""}>Player inventory</option>
+            ${roomOptions(condition.location)}
+          </select>
+        </label>
+      `;
+      }
+
+      if (condition.op === "entity-property-equals") {
+        fields = `
+        <label>
+          Entity
+          <select name="entityId" required>
+            ${entityOptions(condition.entityId)}
+          </select>
+        </label>
+
+        <label>
+          Property name
+          <input
+            name="property"
+            value="${escapeHTML(condition.property)}"
+            required
+          />
+        </label>
+
+        <label>
+          Expected value (JSON)
+          <input
+            name="value"
+            value="${escapeHTML(JSON.stringify(condition.value))}"
+            required
+          />
+        </label>
+      `;
+      }
+
+      if (condition.op === "room-is") {
+        fields = `
+        <label>
+          Room
+          <select name="roomId" required>
+            ${roomOptions(condition.roomId)}
+          </select>
+        </label>
+      `;
+      }
+
+      return `
+      <form
+        class="condition-card"
+        data-condition-index="${index}"
+      >
+        <div class="condition-card-heading">
+          <strong>Condition ${index + 1}</strong>
+
+          <button
+            type="button"
+            class="button button-small button-danger"
+            data-action="delete-condition:${index}"
+          >
+            Remove
+          </button>
+        </div>
+
+        <label>
+          Condition type
+          <select name="op" required>
+            <option value="flag-equals" ${condition.op === "flag-equals" ? "selected" : ""}>Flag equals</option>
+            <option value="entity-location-is" ${condition.op === "entity-location-is" ? "selected" : ""}>Entity location is</option>
+            <option value="entity-property-equals" ${condition.op === "entity-property-equals" ? "selected" : ""}>Entity property equals</option>
+            <option value="room-is" ${condition.op === "room-is" ? "selected" : ""}>Current room is</option>
+          </select>
+        </label>
+
+        <div class="condition-fields">
+          ${fields}
+        </div>
+
+        <button
+          type="submit"
+          class="button button-small"
+          data-action="save-condition"
+        >
+          Save Condition
+        </button>
+      </form>
+    `;
+    })
+    .join("");
 }
 
 function renderEntityList() {
@@ -408,25 +585,41 @@ function renderEntityList() {
 
 function renderCreate() {
   const draft = state.builderDraft;
+  console.log(
+    "ENTITY IDS:",
+    draft.entities.map((entity) => entity.id),
+  );
+
+  console.log(
+    "RULE TRIGGERS:",
+    draft.rules.map((rule) => ({
+      id: rule.id,
+      itemId: rule.trigger?.itemId,
+      targetId: rule.trigger?.targetId,
+    })),
+  );
   const editingRoom =
     draft.rooms.find((room) => room.id === state.editingRoomId) ??
     draft.rooms[0] ??
     null;
-  const editingRule = draft.rules.find(
-  (rule) => rule.id === state.editingRuleId
-) ?? null;
+  const editingRule =
+    draft.rules.find((rule) => rule.id === state.editingRuleId) ?? null;
 
-const ruleEntityOptions = (selectedId) => `
+  const ruleEntityOptions = (selectedId) => `
   <option value="">Select an entity</option>
-  ${draft.entities.map((entity) => `
+  ${draft.entities
+    .map(
+      (entity) => `
     <option
       value="${escapeHTML(entity.id)}"
       ${entity.id === selectedId ? "selected" : ""}
     >
       ${escapeHTML(entity.name)} (${escapeHTML(entity.id)})
     </option>
-  `).join("")}
-`;  
+  `,
+    )
+    .join("")}
+`;
   const editingEntity =
     draft.entities.find((entity) => entity.id === state.editingEntityId) ??
     null;
@@ -744,7 +937,9 @@ const ruleEntityOptions = (selectedId) => `
     </button>
   </form>
 
-  ${editingRule ? `
+  ${
+    editingRule
+      ? `
     <div class="entity-editor rule-editor">
       <div class="section-heading">
         <div>
@@ -799,8 +994,30 @@ const ruleEntityOptions = (selectedId) => `
           </button>
         </div>
       </form>
+
+        <div class="condition-editor">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">REQUIREMENTS</p>
+      <h4>Conditions</h4>
+      <p>Every condition must be true for this rule to execute.</p>
     </div>
-  ` : ""}
+  </div>
+
+  ${renderConditionEditor(editingRule)}
+
+  <button
+    type="button"
+    class="button button-secondary"
+    data-action="add-condition"
+  >
+    + Add Condition
+  </button>
+</div>
+    </div>
+  `
+      : ""
+  }
 </section>
 
 
@@ -1000,31 +1217,56 @@ app.addEventListener("click", async (event) => {
     return;
   }
   if (action.startsWith("edit-rule:")) {
-  state.editingRuleId = action.slice("edit-rule:".length);
-  state.builderNotice = "";
-  renderCreate();
-  return;
-}
-
-if (action.startsWith("delete-rule:")) {
-  const ruleId = action.slice("delete-rule:".length);
-
-  state.builderDraft = deleteRule(state.builderDraft, ruleId);
-
-  if (state.editingRuleId === ruleId) {
-    state.editingRuleId = null;
+    state.editingRuleId = action.slice("edit-rule:".length);
+    state.builderNotice = "";
+    renderCreate();
+    return;
   }
 
-  state.builderNotice = "Rule deleted.";
-  renderCreate();
-  return;
-}
+  if (action.startsWith("delete-rule:")) {
+    const ruleId = action.slice("delete-rule:".length);
 
-if (action === "cancel-rule-edit") {
-  state.editingRuleId = null;
-  renderCreate();
-  return;
-}
+    state.builderDraft = deleteRule(state.builderDraft, ruleId);
+
+    if (state.editingRuleId === ruleId) {
+      state.editingRuleId = null;
+    }
+
+    state.builderNotice = "Rule deleted.";
+    renderCreate();
+    return;
+  }
+
+  if (action === "cancel-rule-edit") {
+    state.editingRuleId = null;
+    renderCreate();
+    return;
+  }
+  if (action === "add-condition") {
+    const ruleId = state.editingRuleId;
+
+    if (!ruleId) return;
+
+    state.builderDraft = addCondition(state.builderDraft, ruleId, "room-is");
+
+    state.builderNotice = "Condition added.";
+    renderCreate();
+    return;
+  }
+
+  if (action.startsWith("delete-condition:")) {
+    const index = Number(action.slice("delete-condition:".length));
+
+    state.builderDraft = deleteCondition(
+      state.builderDraft,
+      state.editingRuleId,
+      index,
+    );
+
+    state.builderNotice = "Condition removed.";
+    renderCreate();
+    return;
+  }
 
   if (action === "start-game") {
     await startGame();
@@ -1042,7 +1284,8 @@ if (action === "cancel-rule-edit") {
 });
 
 app.addEventListener("submit", (event) => {
-  const form = event.target;
+  const form = event.target.closest("form");
+  console.log("A FORM WAS SUBMITTED:", form?.id, event.currentTarget, event);
   event.preventDefault();
 
   if (form.id === "command-form") {
@@ -1136,164 +1379,297 @@ app.addEventListener("submit", (event) => {
     renderCreate();
   }
 
-if (form.id === "add-entity-form") {
-  const name = String(data.get("newEntityName") ?? "").trim();
-  if (!name) return;
+  if (form.id === "add-entity-form") {
+    const name = String(data.get("newEntityName") ?? "").trim();
+    if (!name) return;
 
-  const previousIds = new Set(
-    state.builderDraft.entities.map((entity) => entity.id)
-  );
-
-  state.builderDraft = addEntity(state.builderDraft, name);
-
-  const newEntity = state.builderDraft.entities.find(
-    (entity) => !previousIds.has(entity.id)
-  );
-
-  state.editingEntityId = newEntity.id;
-  state.builderNotice = `Entity "${name}" added.`;
-  renderCreate();
-  return;
-}
-
-if (form.id === "entity-editor-form") {
-  const entityId = String(data.get("entityId") ?? "");
-  const name = String(data.get("entityName") ?? "").trim();
-  const description = String(
-    data.get("entityDescription") ?? ""
-  ).trim();
-
-  const initialLocation = String(
-    data.get("initialLocation") ?? ""
-  );
-
-  const aliases = String(data.get("aliases") ?? "")
-    .split(",")
-    .map((alias) => alias.trim())
-    .filter(Boolean);
-
-  const portable = data.get("portable") === "on";
-
-  let initialProperties;
-
-  try {
-    initialProperties = JSON.parse(
-      String(data.get("initialProperties") ?? "{}")
+    const previousIds = new Set(
+      state.builderDraft.entities.map((entity) => entity.id),
     );
 
-    if (
-      !initialProperties ||
-      typeof initialProperties !== "object" ||
-      Array.isArray(initialProperties)
-    ) {
-      throw new Error("Properties must be a JSON object.");
+    state.builderDraft = addEntity(state.builderDraft, name);
+
+    const newEntity = state.builderDraft.entities.find(
+      (entity) => !previousIds.has(entity.id),
+    );
+
+    state.editingEntityId = newEntity.id;
+    state.builderNotice = `Entity "${name}" added.`;
+    renderCreate();
+    return;
+  }
+
+  if (form.id === "entity-editor-form") {
+    const entityId = String(data.get("entityId") ?? "");
+    const name = String(data.get("entityName") ?? "").trim();
+    const description = String(data.get("entityDescription") ?? "").trim();
+
+    const initialLocation = String(data.get("initialLocation") ?? "");
+
+    const aliases = String(data.get("aliases") ?? "")
+      .split(",")
+      .map((alias) => alias.trim())
+      .filter(Boolean);
+
+    const portable = data.get("portable") === "on";
+
+    let initialProperties;
+
+    try {
+      initialProperties = JSON.parse(
+        String(data.get("initialProperties") ?? "{}"),
+      );
+
+      if (
+        !initialProperties ||
+        typeof initialProperties !== "object" ||
+        Array.isArray(initialProperties)
+      ) {
+        throw new Error("Properties must be a JSON object.");
+      }
+    } catch (error) {
+      state.builderNotice = `Invalid properties JSON: ${error.message}`;
+      renderCreate();
+      return;
     }
-  } catch (error) {
-    state.builderNotice =
-      `Invalid properties JSON: ${error.message}`;
-    renderCreate();
-    return;
-  }
 
-  if (!name || !description) {
-    state.builderNotice =
-      "Entity name and description are required.";
-    renderCreate();
-    return;
-  }
+    if (!name || !description) {
+      state.builderNotice = "Entity name and description are required.";
+      renderCreate();
+      return;
+    }
 
-  if (!state.builderDraft.rooms.some(
-    (room) => room.id === initialLocation
-  )) {
-    state.builderNotice =
-      "Select a valid initial room.";
-    renderCreate();
-    return;
-  }
+    if (!state.builderDraft.rooms.some((room) => room.id === initialLocation)) {
+      state.builderNotice = "Select a valid initial room.";
+      renderCreate();
+      return;
+    }
 
-  state.builderDraft = updateEntity(
-    state.builderDraft,
-    entityId,
-    {
+    state.builderDraft = updateEntity(state.builderDraft, entityId, {
       name,
       description,
       initialLocation,
       portable,
       aliases,
       initialProperties,
+    });
+
+    state.builderNotice = "Entity saved successfully.";
+    renderCreate();
+    return;
+  }
+
+  if (form.id === "add-rule-form") {
+    event.preventDefault();
+
+    const data = new FormData(event.target);
+    const name = String(data.get("name") || "").trim();
+
+    if (!name) return;
+
+    const previousIds = new Set(
+      state.builderDraft.rules.map((rule) => rule.id),
+    );
+
+    state.builderDraft = addRule(state.builderDraft, name);
+
+    const newRule = state.builderDraft.rules.find(
+      (rule) => !previousIds.has(rule.id),
+    );
+
+    state.editingRuleId = newRule?.id ?? null;
+    state.builderNotice = "Rule created. Configure its trigger below.";
+
+    renderCreate();
+    return;
+  }
+
+  if (event.target.getAttribute("id") === "rule-editor-form") {
+    event.preventDefault();
+
+    const data = new FormData(event.target);
+    console.log("Form data:", Object.fromEntries(data.entries()));
+
+    const ruleId = String(data.get("id") || "");
+    const itemId = String(data.get("itemId") || "");
+    const targetId = String(data.get("targetId") || "");
+    const successMessage = String(data.get("successMessage") || "").trim();
+
+    const entityIds = new Set(
+      state.builderDraft.entities.map((entity) => entity.id),
+    );
+
+    if (!entityIds.has(itemId) || !entityIds.has(targetId)) {
+      state.builderNotice = "Select valid trigger entities.";
+      renderCreate();
+      return;
     }
-  );
 
-  state.builderNotice = "Entity saved successfully.";
-  renderCreate();
-  return;
-}
+    if (!successMessage) {
+      state.builderNotice = "A success message is required.";
+      renderCreate();
+      return;
+    }
 
-if (event.target.id === "add-rule-form") {
-  event.preventDefault();
+    state.builderDraft = updateRule(state.builderDraft, ruleId, {
+      trigger: {
+        type: "use",
+        itemId,
+        targetId,
+      },
+      successMessage,
+    });
 
-  const data = new FormData(event.target);
-  const name = String(data.get("name") || "").trim();
-
-  if (!name) return;
-
-  const previousIds = new Set(
-    state.builderDraft.rules.map((rule) => rule.id)
-  );
-
-  state.builderDraft = addRule(state.builderDraft, name);
-
-  const newRule = state.builderDraft.rules.find(
-    (rule) => !previousIds.has(rule.id)
-  );
-
-  state.editingRuleId = newRule?.id ?? null;
-  state.builderNotice = "Rule created. Configure its trigger below.";
-
-  renderCreate();
-  return;
-}
-
-if (event.target.id === "rule-editor-form") {
-  event.preventDefault();
-
-  const data = new FormData(event.target);
-
-  const ruleId = String(data.get("id") || "");
-  const itemId = String(data.get("itemId") || "");
-  const targetId = String(data.get("targetId") || "");
-  const successMessage = String(data.get("successMessage") || "").trim();
-
-  const entityIds = new Set(
-    state.builderDraft.entities.map((entity) => entity.id)
-  );
-
-  if (!entityIds.has(itemId) || !entityIds.has(targetId)) {
-    state.builderNotice = "Select valid trigger entities.";
+    state.builderNotice = "Rule saved successfully.";
     renderCreate();
     return;
   }
+  
+  if (event.target.matches(".condition-card")) {
+    event.preventDefault();
 
-  if (!successMessage) {
-    state.builderNotice = "A success message is required.";
+    const form = event.target;
+    const index = Number(form.dataset.conditionIndex);
+    const data = new FormData(form);
+    const op = String(data.get("op") || "");
+
+    const allowedOperations = [
+      "flag-equals",
+      "entity-location-is",
+      "entity-property-equals",
+      "room-is",
+    ];
+
+    if (!allowedOperations.includes(op)) return;
+
+    let condition = { op };
+
+    if (op === "flag-equals") {
+      condition.flag = String(data.get("flag") || "").trim();
+
+      try {
+        condition.value = JSON.parse(String(data.get("value")));
+      } catch {
+        state.builderNotice =
+          'Invalid JSON value. Example: false, 5, or "open".';
+        renderCreate();
+        return;
+      }
+
+      if (!condition.flag) {
+        state.builderNotice = "Enter a flag name.";
+        renderCreate();
+        return;
+      }
+    }
+
+    if (op === "entity-location-is") {
+      condition.entityId = String(data.get("entityId") || "");
+      condition.location = String(data.get("location") || "");
+
+      const validLocation =
+        condition.location === "inventory" ||
+        state.builderDraft.rooms.some((room) => room.id === condition.location);
+
+      const validEntity = state.builderDraft.entities.some(
+        (entity) => entity.id === condition.entityId,
+      );
+
+      if (!validEntity || !validLocation) {
+        state.builderNotice = "Select a valid entity and location.";
+        renderCreate();
+        return;
+      }
+    }
+
+    if (op === "entity-property-equals") {
+      condition.entityId = String(data.get("entityId") || "");
+      condition.property = String(data.get("property") || "").trim();
+
+      try {
+        condition.value = JSON.parse(String(data.get("value")));
+      } catch {
+        state.builderNotice =
+          'Invalid JSON value. Example: false, 5, or "open".';
+        renderCreate();
+        return;
+      }
+
+      const validEntity = state.builderDraft.entities.some(
+        (entity) => entity.id === condition.entityId,
+      );
+
+      if (!validEntity || !condition.property) {
+        state.builderNotice = "Select an entity and enter a property name.";
+        renderCreate();
+        return;
+      }
+    }
+
+    if (op === "room-is") {
+      condition.roomId = String(data.get("roomId") || "");
+
+      const validRoom = state.builderDraft.rooms.some(
+        (room) => room.id === condition.roomId,
+      );
+
+      if (!validRoom) {
+        state.builderNotice = "Select a valid room.";
+        renderCreate();
+        return;
+      }
+    }
+
+    state.builderDraft = updateCondition(
+      state.builderDraft,
+      state.editingRuleId,
+      index,
+      condition,
+    );
+
+    state.builderNotice = "Condition saved.";
     renderCreate();
     return;
   }
+});
+app.addEventListener("change", (event) => {
+  if (event.target.matches(".condition-card select[name='op']")) {
+    const form = event.target.closest(".condition-card");
+    const index = Number(form.dataset.conditionIndex);
+    const op = event.target.value;
 
-  state.builderDraft = updateRule(state.builderDraft, ruleId, {
-    trigger: {
-      type: "use",
-      itemId,
-      targetId,
-    },
-    successMessage,
-  });
+    const defaults = {
+      "flag-equals": {
+        op,
+        flag: "",
+        value: true,
+      },
+      "entity-location-is": {
+        op,
+        entityId: "",
+        location: "inventory",
+      },
+      "entity-property-equals": {
+        op,
+        entityId: "",
+        property: "",
+        value: true,
+      },
+      "room-is": {
+        op,
+        roomId: "",
+      },
+    };
 
-  state.builderNotice = "Rule saved successfully.";
-  renderCreate();
-  return;
-}
+    state.builderDraft = updateCondition(
+      state.builderDraft,
+      state.editingRuleId,
+      index,
+      defaults[op],
+    );
 
+    renderCreate();
+  }
 });
 
 render();
