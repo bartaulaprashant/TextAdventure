@@ -19,6 +19,8 @@ import {
   addEffect,
   updateEffect,
   deleteEffect,
+  loadBuilderDraft,
+  saveBuilderDraft
 } from "./builder/worldDraft.js";
 
 const app = document.querySelector("#app");
@@ -30,7 +32,7 @@ let gameError = "";
 const state = {
   page: "home",
   transcript: [],
-  builderDraft: createWorldDraft(),
+  builderDraft: loadBuilderDraft(),
   editingRoomId: "starting-room",
   builderNotice: "",
   editingEntityId: null,
@@ -59,6 +61,10 @@ function button(label, action, className = "") {
 function navLink(label, page) {
   const active = state.page === page ? "active" : "";
   return `<button class="nav-link ${active}" data-page="${page}">${label}</button>`;
+}
+function setBuilderDraft(draft) {
+  state.builderDraft = draft;
+  saveBuilderDraft(draft);
 }
 
 function renderShell(content) {
@@ -768,19 +774,6 @@ function renderEntityList() {
 
 function renderCreate() {
   const draft = state.builderDraft;
-  console.log(
-    "ENTITY IDS:",
-    draft.entities.map((entity) => entity.id),
-  );
-
-  console.log(
-    "RULE TRIGGERS:",
-    draft.rules.map((rule) => ({
-      id: rule.id,
-      itemId: rule.trigger?.itemId,
-      targetId: rule.trigger?.targetId,
-    })),
-  );
   const editingRoom =
     draft.rooms.find((room) => room.id === state.editingRoomId) ??
     draft.rooms[0] ??
@@ -1383,7 +1376,7 @@ app.addEventListener("click", async (event) => {
     const roomId = action.slice("delete-room:".length);
 
     if (state.builderDraft.rooms.length > 1) {
-      state.builderDraft = deleteRoom(state.builderDraft, roomId);
+      setBuilderDraft(deleteRoom(state.builderDraft, roomId));
 
       if (state.editingRoomId === roomId) {
         state.editingRoomId = state.builderDraft.manifest.startRoomId;
@@ -1407,7 +1400,7 @@ app.addEventListener("click", async (event) => {
   if (action.startsWith("delete-entity:")) {
     const entityId = action.slice("delete-entity:".length);
 
-    state.builderDraft = deleteEntity(state.builderDraft, entityId);
+    setBuilderDraft(deleteEntity(state.builderDraft, entityId));
 
     if (state.editingEntityId === entityId) {
       state.editingEntityId = null;
@@ -1429,7 +1422,7 @@ app.addEventListener("click", async (event) => {
   if (action.startsWith("delete-rule:")) {
     const ruleId = action.slice("delete-rule:".length);
 
-    state.builderDraft = deleteRule(state.builderDraft, ruleId);
+    setBuilderDraft(deleteRule(state.builderDraft, ruleId));
 
     if (state.editingRuleId === ruleId) {
       state.editingRuleId = null;
@@ -1450,7 +1443,7 @@ app.addEventListener("click", async (event) => {
 
     if (!ruleId) return;
 
-    state.builderDraft = addCondition(state.builderDraft, ruleId, "room-is");
+    setBuilderDraft(addCondition(state.builderDraft, ruleId, "room-is"));
 
     state.builderNotice = "Condition added.";
     renderCreate();
@@ -1460,11 +1453,13 @@ app.addEventListener("click", async (event) => {
   if (action.startsWith("delete-condition:")) {
     const index = Number(action.slice("delete-condition:".length));
 
-    state.builderDraft = deleteCondition(
-      state.builderDraft,
-      state.editingRuleId,
-      index,
-    );
+   setBuilderDraft(
+  deleteCondition(
+    state.builderDraft,
+    state.editingRuleId,
+    index,
+  ),
+);
 
     state.builderNotice = "Condition removed.";
     renderCreate();
@@ -1476,11 +1471,13 @@ app.addEventListener("click", async (event) => {
 
   if (!ruleId) return;
 
-  state.builderDraft = addEffect(
+  setBuilderDraft(
+  addEffect(
     state.builderDraft,
     ruleId,
-    "set-flag"
-  );
+    "set-flag",
+  ),
+);
 
   state.builderNotice = "Effect added.";
   renderCreate();
@@ -1490,11 +1487,7 @@ app.addEventListener("click", async (event) => {
 if (action.startsWith("delete-effect:")) {
   const index = Number(action.slice("delete-effect:".length));
 
-  state.builderDraft = deleteEffect(
-    state.builderDraft,
-    state.editingRuleId,
-    index
-  );
+  setBuilderDraft(deleteEffect(state.builderDraft, ruleId, index));
 
   state.builderNotice = "Effect removed.";
   renderCreate();
@@ -1541,19 +1534,19 @@ app.addEventListener("submit", (event) => {
       return;
     }
 
-    state.builderDraft = {
-      ...state.builderDraft,
-      manifest: {
-        ...state.builderDraft.manifest,
-        id: worldId,
-        title,
-        startRoomId,
-      },
-      text: {
-        ...state.builderDraft.text,
-        intro,
-      },
-    };
+   setBuilderDraft({
+  ...state.builderDraft,
+  manifest: {
+    ...state.builderDraft.manifest,
+    id: worldId,
+    title,
+    startRoomId,
+  },
+  text: {
+    ...state.builderDraft.text,
+    intro,
+  },
+});
 
     state.builderNotice = "World details saved.";
     renderCreate();
@@ -1568,7 +1561,7 @@ app.addEventListener("submit", (event) => {
       state.builderDraft.rooms.map((room) => room.id),
     );
 
-    state.builderDraft = addRoom(state.builderDraft, name);
+    setBuilderDraft(addRoom(state.builderDraft, name));
 
     const newRoom = state.builderDraft.rooms.find(
       (room) => !previousRoomIds.has(room.id),
@@ -1601,11 +1594,13 @@ app.addEventListener("submit", (event) => {
       }
     }
 
-    state.builderDraft = updateRoom(state.builderDraft, roomId, {
-      name,
-      description,
-      exits,
-    });
+    setBuilderDraft(
+  updateRoom(state.builderDraft, roomId, {
+    name,
+    description,
+    exits,
+  }),
+);
 
     state.builderNotice = "Room saved.";
     renderCreate();
@@ -1619,7 +1614,7 @@ app.addEventListener("submit", (event) => {
       state.builderDraft.entities.map((entity) => entity.id),
     );
 
-    state.builderDraft = addEntity(state.builderDraft, name);
+    setBuilderDraft(addEntity(state.builderDraft, name))
 
     const newEntity = state.builderDraft.entities.find(
       (entity) => !previousIds.has(entity.id),
@@ -1677,14 +1672,16 @@ app.addEventListener("submit", (event) => {
       return;
     }
 
-    state.builderDraft = updateEntity(state.builderDraft, entityId, {
-      name,
-      description,
-      initialLocation,
-      portable,
-      aliases,
-      initialProperties,
-    });
+   setBuilderDraft(
+  updateEntity(state.builderDraft, entityId, {
+    name,
+    description,
+    initialLocation,
+    portable,
+    aliases,
+    initialProperties,
+  }),
+);
 
     state.builderNotice = "Entity saved successfully.";
     renderCreate();
@@ -1703,7 +1700,7 @@ app.addEventListener("submit", (event) => {
       state.builderDraft.rules.map((rule) => rule.id),
     );
 
-    state.builderDraft = addRule(state.builderDraft, name);
+    setBuilderDraft(addRule(state.builderDraft, name));
 
     const newRule = state.builderDraft.rules.find(
       (rule) => !previousIds.has(rule.id),
@@ -1743,14 +1740,16 @@ app.addEventListener("submit", (event) => {
       return;
     }
 
-    state.builderDraft = updateRule(state.builderDraft, ruleId, {
-      trigger: {
-        type: "use",
-        itemId,
-        targetId,
-      },
-      successMessage,
-    });
+   setBuilderDraft(
+  updateRule(state.builderDraft, ruleId, {
+    trigger: {
+      type: "use",
+      itemId,
+      targetId,
+    },
+    successMessage,
+  }),
+);
 
     state.builderNotice = "Rule saved successfully.";
     renderCreate();
@@ -1851,18 +1850,121 @@ app.addEventListener("submit", (event) => {
         return;
       }
     }
-
-    state.builderDraft = updateCondition(
-      state.builderDraft,
-      state.editingRuleId,
-      index,
-      condition,
-    );
+setBuilderDraft(
+  updateCondition(
+    state.builderDraft,
+    state.editingRuleId,
+    index,
+    condition,
+  ),
+);
 
     state.builderNotice = "Condition saved.";
     renderCreate();
     return;
   }
+
+if (event.target.matches(".effect-card")) {
+  event.preventDefault();
+
+  const form = event.target;
+  const index = Number(form.dataset.effectIndex);
+  const data = new FormData(form);
+  const op = String(data.get("op") || "");
+
+  const allowedOperations = [
+    "set-flag",
+    "set-entity-property",
+    "move-entity"
+  ];
+
+  if (!allowedOperations.includes(op)) return;
+
+  let effect = { op };
+
+  // SET GAME FLAG
+  if (op === "set-flag") {
+    effect.flag = String(data.get("flag") || "").trim();
+
+    try {
+      effect.value = JSON.parse(String(data.get("value")));
+    } catch {
+      state.builderNotice =
+        'Invalid JSON value. Example: false, 5, or "open".';
+      renderCreate();
+      return;
+    }
+
+    if (!effect.flag) {
+      state.builderNotice = "Enter a flag name.";
+      renderCreate();
+      return;
+    }
+  }
+
+  // SET ENTITY PROPERTY
+  if (op === "set-entity-property") {
+    effect.entityId = String(data.get("entityId") || "");
+    effect.property = String(data.get("property") || "").trim();
+
+    try {
+      effect.value = JSON.parse(String(data.get("value")));
+    } catch {
+      state.builderNotice =
+        'Invalid JSON value. Example: false, 5, or "open".';
+      renderCreate();
+      return;
+    }
+
+    const validEntity = state.builderDraft.entities.some(
+      (entity) => entity.id === effect.entityId
+    );
+
+    if (!validEntity || !effect.property) {
+      state.builderNotice =
+        "Select an entity and enter a property name.";
+      renderCreate();
+      return;
+    }
+  }
+
+  // MOVE ENTITY
+  if (op === "move-entity") {
+    effect.entityId = String(data.get("entityId") || "");
+    effect.location = String(data.get("location") || "");
+
+    const validEntity = state.builderDraft.entities.some(
+      (entity) => entity.id === effect.entityId
+    );
+
+    const validLocation =
+      effect.location === "inventory" ||
+      state.builderDraft.rooms.some(
+        (room) => room.id === effect.location
+      );
+
+    if (!validEntity || !validLocation) {
+      state.builderNotice =
+        "Select a valid entity and destination.";
+      renderCreate();
+      return;
+    }
+  }
+
+  setBuilderDraft(
+  updateEffect(
+    state.builderDraft,
+    state.editingRuleId,
+    index,
+    effect,
+  ),
+);
+
+  state.builderNotice = "Effect saved.";
+  renderCreate();
+  return;
+}
+
 });
 app.addEventListener("change", (event) => {
   if (event.target.matches(".condition-card select[name='op']")) {
@@ -1893,12 +1995,14 @@ app.addEventListener("change", (event) => {
       },
     };
 
-    state.builderDraft = updateCondition(
-      state.builderDraft,
-      state.editingRuleId,
-      index,
-      defaults[op],
-    );
+   setBuilderDraft(
+  updateCondition(
+    state.builderDraft,
+    state.editingRuleId,
+    index,
+    defaults[op],
+  ),
+);
 
     renderCreate();
   }
@@ -1945,12 +2049,14 @@ app.addEventListener("change", (event) => {
       return;
   }
 
-  state.builderDraft = updateEffect(
+  setBuilderDraft(
+  updateEffect(
     state.builderDraft,
     ruleId,
     index,
-    newEffect
-  );
+    newEffect,
+  ),
+);
 
   state.builderNotice = "Effect type changed.";
   renderCreate();

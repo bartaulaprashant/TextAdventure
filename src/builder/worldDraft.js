@@ -1,5 +1,6 @@
 
 const DIRECTIONS = ["north", "east", "south", "west", "up", "down"];
+const BUILDER_DRAFT_STORAGE_KEY = "text-adventure-builder-draft";
 
 export function createWorldDraft() {
   return {
@@ -29,6 +30,48 @@ export function createWorldDraft() {
       },
     },
   };
+}
+export function loadBuilderDraft() {
+  try {
+    const savedDraft = localStorage.getItem(BUILDER_DRAFT_STORAGE_KEY);
+
+    if (!savedDraft) {
+      return createWorldDraft();
+    }
+
+    const parsedDraft = JSON.parse(savedDraft);
+
+    // Basic structure check before restoring.
+    if (
+      parsedDraft &&
+      parsedDraft.manifest &&
+      Array.isArray(parsedDraft.rooms) &&
+      Array.isArray(parsedDraft.entities) &&
+      Array.isArray(parsedDraft.rules) &&
+      parsedDraft.text
+    ) {
+      return parsedDraft;
+    }
+
+    return createWorldDraft();
+  } catch (error) {
+    console.error("Could not load saved builder draft:", error);
+    return createWorldDraft();
+  }
+}
+
+export function saveBuilderDraft(draft) {
+  try {
+    localStorage.setItem(
+      BUILDER_DRAFT_STORAGE_KEY,
+      JSON.stringify(draft),
+    );
+
+    return true;
+  } catch (error) {
+    console.error("Could not save builder draft:", error);
+    return false;
+  }
 }
 
 export function slugify(value) {
@@ -190,7 +233,58 @@ export function validateDraft(draft) {
   if (typeof rule.successMessage !== "string" || !rule.successMessage.trim()) {
     errors.push(`Rule "${rule.id}" needs a success message.`);
   }
+
+
+for (const effect of rule.effects || []) {
+  if (effect.op === "set-flag") {
+    if (!effect.flag?.trim()) {
+      errors.push(
+        `Rule "${rule.id}" has an effect with an empty flag name.`
+      );
+    }
+  }
+
+  else if (effect.op === "set-entity-property") {
+    if (!entityIds.has(effect.entityId)) {
+      errors.push(
+        `Rule "${rule.id}" references an unknown entity in an effect.`
+      );
+    }
+
+    if (!effect.property?.trim()) {
+      errors.push(
+        `Rule "${rule.id}" has an effect with an empty property name.`
+      );
+    }
+  }
+
+  else if (effect.op === "move-entity") {
+    if (!entityIds.has(effect.entityId)) {
+      errors.push(
+        `Rule "${rule.id}" references an unknown entity in a move effect.`
+      );
+    }
+
+    const validLocation =
+      effect.location === "inventory" ||
+      roomIds.has(effect.location);
+
+    if (!validLocation) {
+      errors.push(
+        `Rule "${rule.id}" has an effect with an invalid destination.`
+      );
+    }
+  }
+
+  else {
+    errors.push(
+      `Rule "${rule.id}" has an unknown effect operation "${effect.op}".`
+    );
+  }
 }
+
+}
+
 
   return {
     ok: errors.length === 0,
