@@ -1,5 +1,5 @@
 import "./style.css";
-import { createGameSession } from "./engine/gameSession.js";
+import { createGameSession, createGameSessionFromWorld } from "./engine/gameSession.js";
 import {exportWorldAsZip} from "./builder/worldExport.js";
 import { importWorldFromZip } from "./builder/worldImport.js";
 import {
@@ -30,6 +30,7 @@ const app = document.querySelector("#app");
 let session = null;
 let isLoadingGame = false;
 let gameError = "";
+let activeImportedWorld = null;
 
 const state = {
   page: "home",
@@ -215,6 +216,7 @@ function renderHome() {
   `);
 }
 
+
 function renderPlay() {
   if (!session) {
     renderShell(`
@@ -238,9 +240,40 @@ function renderPlay() {
             "start-game",
             "btn btn-primary",
           )}
-          ${gameError ? `<p class="error-message">${escapeHTML(gameError)}</p>` : ""}
         </div>
       </section>
+
+      <section class="panel play-card import-world-card">
+        <div class="world-icon large" aria-hidden="true">⇧</div>
+        <div class="play-card-copy">
+          <p class="section-kicker">CUSTOM WORLD</p>
+          <h2>Import Your Own World</h2>
+          <p>
+            Load an adventure exported from the World Builder.
+            Select a world package in ZIP format to start playing.
+          </p>
+
+          <input
+            type="file"
+            id="game-world-import-input"
+            accept=".zip,application/zip"
+            hidden
+          />
+
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-action="import-game-world"
+            ${isLoadingGame ? "disabled" : ""}
+          >
+            ⇧ &nbsp; Import World (.zip)
+          </button>
+        </div>
+      </section>
+
+      ${gameError
+        ? `<p class="error-message">${escapeHTML(gameError)}</p>`
+        : ""}
     `);
     return;
   }
@@ -251,7 +284,7 @@ function renderPlay() {
 
   renderShell(`
     <section class="page-heading compact-heading">
-      <p class="eyebrow">PLAY / THE FORGOTTEN CELLAR</p>
+      <p class="eyebrow">PLAY / ${escapeHTML(session.title)}</p>
       <h1>Adventure Terminal<span class="cursor">_</span></h1>
     </section>
 
@@ -330,6 +363,7 @@ function renderPlay() {
   const transcript = document.querySelector("#transcript");
   if (transcript) transcript.scrollTop = transcript.scrollHeight;
 }
+
 
 function renderExitOptions(room, direction) {
   const selectedId = room.exits[direction] ?? "";
@@ -1402,7 +1436,8 @@ function render() {
 
 async function startGame() {
   if (isLoadingGame) return;
-
+  
+  activeImportedWorld = null;
   isLoadingGame = true;
   gameError = "";
   renderPlay();
@@ -1422,6 +1457,45 @@ async function startGame() {
     renderPlay();
   }
 }
+
+async function startImportedGame(file) {
+  if (isLoadingGame) return;
+
+  isLoadingGame = true;
+  gameError = "";
+  renderPlay();
+
+  try {
+    const world = await importWorldFromZip(file);
+
+    session = createGameSessionFromWorld(world);
+
+    // Keep the imported data so Restart can restart this same world.
+    activeImportedWorld = world;
+
+    state.transcript = [
+      { type: "message", text: session.intro },
+      {
+        type: "message",
+        text: 'Type "look" to inspect your surroundings.',
+      },
+    ];
+  } catch (error) {
+    console.error("Could not import world:", error);
+
+    gameError =
+      error instanceof Error
+        ? error.message
+        : "Could not import the world.";
+
+    session = null;
+    activeImportedWorld = null;
+  } finally {
+    isLoadingGame = false;
+    renderPlay();
+  }
+}
+
 
 function runCommand(input) {
   const command = input.trim();
@@ -1482,6 +1556,10 @@ if (action === "export-world") {
 }
 if (action === "import-world") {
   document.getElementById("world-import-input")?.click();
+  return;
+}
+if (action === "import-game-world") {
+  document.getElementById("game-world-import-input")?.click();
   return;
 }
 
@@ -1619,10 +1697,23 @@ if (action.startsWith("delete-effect:")) {
   if (action === "start-game") {
     await startGame();
   } else if (action === "restart-game") {
+    if (activeImportedWorld) {
+    session = createGameSessionFromWorld(activeImportedWorld);
+
+    state.transcript = [
+      { type: "message", text: session.intro },
+      {
+        type: "message",
+        text: 'Type "look" to inspect your surroundings.',
+      },
+    ];
+  } else {
     session = null;
     state.transcript = [];
-    state.page = "play";
-    renderPlay();
+  }
+
+  renderPlay();
+  return;
   } else if (action.startsWith("command:")) {
     runCommand(action.slice("command:".length));
   } else if (["play", "create", "about", "home"].includes(action)) {
@@ -2185,6 +2276,18 @@ app.addEventListener("change", (event) => {
   renderCreate();
 });
 app.addEventListener("change", async (event) => {
+if (event.target.matches("#game-world-import-input")) {
+  const input = event.target;
+  const file = input.files?.[0];
+
+  if (!file) return;
+
+  await startImportedGame(file);
+
+  input.value = "";
+  return;
+}
+
   if (!event.target.matches("#world-import-input")) return;
 
   const input = event.target;

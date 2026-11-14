@@ -1,21 +1,42 @@
 import { loadWorld } from "./worldLoader.js";
+import { validateWorld } from "./worldValidator.js";
 import { createInitialState } from "./state.js";
 import { executeCommand } from "./actions.js";
 import { evaluateConditions } from "./ruleEvaluator.js";
 
+// Existing entry point: load a world from public/worlds/.
 export async function createGameSession(worldId) {
   const world = await loadWorld(worldId);
+
+  return createGameSessionFromWorld(world);
+}
+
+// New entry point: create a session from an imported world object.
+export function createGameSessionFromWorld(world) {
+  const result = validateWorld(world);
+
+  if (!result.valid) {
+    throw new Error(
+      `World validation failed:\n${result.errors.join("\n")}`,
+    );
+  }
+
   let state = createInitialState(world);
 
   function getCurrentRoom() {
-    return world.rooms.find((room) => room.id === state.currentRoomId) ?? null;
+    return (
+      world.rooms.find((room) => room.id === state.currentRoomId) ?? null
+    );
   }
 
   function getVisibleEntities() {
     return world.entities.filter((entity) => {
       const location = state.entities[entity.id]?.location;
 
-      return location === state.currentRoomId || location === "inventory";
+      return (
+        location === state.currentRoomId ||
+        location === "inventory"
+      );
     });
   }
 
@@ -27,9 +48,14 @@ export async function createGameSession(worldId) {
     const suggestions = ["look", "inventory"];
 
     for (const [direction] of Object.entries(room.exits)) {
-      const requirements = room.exitRequirements?.[direction] ?? [];
+      const requirements =
+        room.exitRequirements?.[direction] ?? [];
 
-      const check = evaluateConditions(world, state, requirements);
+      const check = evaluateConditions(
+        world,
+        state,
+        requirements,
+      );
 
       if (check.ok && check.passed) {
         suggestions.push(`go ${direction}`);
@@ -50,13 +76,16 @@ export async function createGameSession(worldId) {
     }
 
     const carried = world.entities.filter(
-      (entity) => state.entities[entity.id]?.location === "inventory",
+      (entity) =>
+        state.entities[entity.id]?.location === "inventory",
     );
 
     for (const rule of world.rules) {
       if (rule.trigger?.type !== "use") continue;
 
-      const item = carried.find((entity) => entity.id === rule.trigger.itemId);
+      const item = carried.find(
+        (entity) => entity.id === rule.trigger.itemId,
+      );
 
       const target = visible.find(
         (entity) =>
@@ -91,7 +120,8 @@ export async function createGameSession(worldId) {
     getSuggestions,
     getInventory: () =>
       world.entities.filter(
-        (entity) => state.entities[entity.id]?.location === "inventory",
+        (entity) =>
+          state.entities[entity.id]?.location === "inventory",
       ),
     execute,
   };
