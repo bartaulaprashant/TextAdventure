@@ -2,6 +2,7 @@
 const DIRECTIONS = ["north", "east", "south", "west", "up", "down"];
 const BUILDER_DRAFT_STORAGE_KEY = "text-adventure-builder-draft";
 
+
 export function createWorldDraft() {
   return {
     manifest: {

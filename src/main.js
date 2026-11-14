@@ -1,5 +1,7 @@
 import "./style.css";
 import { createGameSession } from "./engine/gameSession.js";
+import {exportWorldAsZip} from "./builder/worldExport.js";
+import { importWorldFromZip } from "./builder/worldImport.js";
 import {
   createWorldDraft,
   addRoom,
@@ -41,6 +43,7 @@ const state = {
   builderSaveStatus: "Draft is saved automatically in this browser.",
 };
 
+const BUILDER_DRAFT_STORAGE_KEY = "text-adventure-builder-draft";
 function escapeHTML(value = "") {
   return String(value).replace(
     /[&<>"']/g,
@@ -871,6 +874,27 @@ function renderCreate() {
     >
       Clear Draft
     </button>
+    <button
+  type="button"
+  class="btn"
+  data-action="export-world"
+>
+  Export World (.zip)
+</button>
+<button
+  type="button"
+  class="btn"
+  data-action="import-world"
+>
+  Import World (.zip)
+</button>
+
+<input
+  type="file"
+  id="world-import-input"
+  accept=".zip,application/zip"
+  hidden
+/>
   </div>
 </div>
 
@@ -1442,6 +1466,22 @@ if (action === "clear-draft") {
 
   clearCurrentDraft();
   renderCreate();
+  return;
+}
+if (action === "export-world") {
+  try {
+    await exportWorldAsZip(state.builderDraft);
+    state.builderNotice = "World exported successfully.";
+  } catch (error) {
+    console.error("World export failed:", error);
+    state.builderNotice = "Could not export world.";
+  }
+
+  renderCreate();
+  return;
+}
+if (action === "import-world") {
+  document.getElementById("world-import-input")?.click();
   return;
 }
 
@@ -2142,6 +2182,48 @@ app.addEventListener("change", (event) => {
 );
 
   state.builderNotice = "Effect type changed.";
+  renderCreate();
+});
+app.addEventListener("change", async (event) => {
+  if (!event.target.matches("#world-import-input")) return;
+
+  const input = event.target;
+  const file = input.files?.[0];
+
+  if (!file) return;
+
+  const confirmed = window.confirm(
+    "Importing this world will replace your current builder draft. Continue?"
+  );
+
+  if (!confirmed) {
+    input.value = "";
+    return;
+  }
+
+  try {
+    const importedDraft = await importWorldFromZip(file);
+
+    setBuilderDraft(importedDraft);
+
+    // Reset editor selections to match the imported world.
+    state.editingRoomId =
+      importedDraft.manifest.startRoomId ||
+      importedDraft.rooms[0]?.id ||
+      null;
+
+    state.editingEntityId = null;
+    state.editingRuleId = null;
+    state.editingConditionIndex = null;
+
+    state.builderNotice = "World imported successfully.";
+  } catch (error) {
+    console.error("World import failed:", error);
+
+    state.builderNotice = `Import failed: ${error.message}`;
+  }
+
+  input.value = "";
   renderCreate();
 });
 
