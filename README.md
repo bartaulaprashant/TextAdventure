@@ -18,6 +18,8 @@ point as structured JSON.
 > coverage, accessibility, security hardening, and larger-world
 > tooling---can be strengthened in future iterations.
 
+## Live url: https://wild-textadventure.netlify.app/
+
 ------------------------------------------------------------------------
 
 ## Contents
