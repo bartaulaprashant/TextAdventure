@@ -38,6 +38,7 @@ const state = {
   editingEntityId: null,
   editingRuleId: null,
   editingConditionIndex: null,
+  builderSaveStatus: "Draft is saved automatically in this browser.",
 };
 
 function escapeHTML(value = "") {
@@ -64,7 +65,43 @@ function navLink(label, page) {
 }
 function setBuilderDraft(draft) {
   state.builderDraft = draft;
-  saveBuilderDraft(draft);
+
+  const saved = saveBuilderDraft(draft);
+
+  state.builderSaveStatus = saved
+    ? "All changes saved locally."
+    : "Could not save changes. Check browser storage.";
+}
+function saveCurrentDraft() {
+  const saved = saveBuilderDraft(state.builderDraft);
+
+  state.builderSaveStatus = saved
+    ? "Draft saved successfully."
+    : "Could not save draft.";
+
+  state.builderNotice = state.builderSaveStatus;
+}
+
+function clearCurrentDraft() {
+  try {
+    localStorage.removeItem(BUILDER_DRAFT_STORAGE_KEY);
+
+    state.builderDraft = createWorldDraft();
+
+    state.editingRoomId = "starting-room";
+    state.editingEntityId = null;
+    state.editingRuleId = null;
+    state.editingConditionIndex = null;
+
+    state.builderSaveStatus = "Fresh draft. Changes will be saved automatically.";
+    state.builderNotice = "Draft cleared. A new world has been created.";
+
+    return true;
+  } catch (error) {
+    console.error("Could not clear builder draft:", error);
+    state.builderNotice = "Could not clear saved draft.";
+    return false;
+  }
 }
 
 function renderShell(content) {
@@ -812,6 +849,31 @@ function renderCreate() {
   </p>
 </section>
 
+<div class="builder-draft-toolbar">
+  <div class="draft-status">
+    <span class="section-kicker">DRAFT STATUS</span>
+    <p class="muted">${escapeHTML(state.builderSaveStatus)}</p>
+  </div>
+
+  <div class="draft-actions">
+    <button
+      type="button"
+      class="btn btn-primary"
+      data-action="save-draft"
+    >
+      Save Draft
+    </button>
+
+    <button
+      type="button"
+      class="btn"
+      data-action="clear-draft"
+    >
+      Clear Draft
+    </button>
+  </div>
+</div>
+
     <div class="builder-workspace">
       <section class="panel builder-section">
         <p class="section-kicker">01 / WORLD DETAILS</p>
@@ -1365,6 +1427,24 @@ app.addEventListener("click", async (event) => {
 
   const action = target.dataset.action;
 
+  if (action === "save-draft") {
+  saveCurrentDraft();
+  renderCreate();
+  return;
+}
+
+if (action === "clear-draft") {
+  const confirmed = window.confirm(
+    "Are you sure you want to clear your current world draft? This cannot be undone."
+  );
+
+  if (!confirmed) return;
+
+  clearCurrentDraft();
+  renderCreate();
+  return;
+}
+
   if (action.startsWith("edit-room:")) {
     state.editingRoomId = action.slice("edit-room:".length);
     state.builderNotice = "";
@@ -1486,8 +1566,11 @@ app.addEventListener("click", async (event) => {
 
 if (action.startsWith("delete-effect:")) {
   const index = Number(action.slice("delete-effect:".length));
+  const ruleId = state.editingRuleId;
 
-  setBuilderDraft(deleteEffect(state.builderDraft, ruleId, index));
+  setBuilderDraft(
+    deleteEffect(state.builderDraft, ruleId, index),
+  );
 
   state.builderNotice = "Effect removed.";
   renderCreate();
